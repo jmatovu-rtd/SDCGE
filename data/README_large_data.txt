@@ -1,0 +1,1 @@
+Large LINKAGE example data: 100 activities/products (P001-P100), full SAM accounts with taxes, factors, institutions and margin account. CSV is the default reader; Excel mirror is provided for inspection.

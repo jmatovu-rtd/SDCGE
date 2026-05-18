@@ -1,0 +1,80 @@
+# Usage: add_income_equations!(model, data, PAR)
+# Paper-numbered LINKAGE income-distribution equations.
+# IMPORTANT: These equations follow the paper equations Y-1--Y-8 exactly in structure.
+
+function add_income_equations!(model, data::LinkageData, PAR)
+    S=data.sets; default_sets!(data)
+    i=S[:i]; r=S[:r]; rp=S[:rp]; v=S[:v]; l=S[:l]; h=S[:h]; ins=S[:in]
+
+    # JuMP variables declared in Variables.jl
+    LV      = model[:LV]
+    Kvd     = model[:Kvd]
+    Td      = model[:Td]
+    Fd      = model[:Fd]
+    LF_d    = model[:LF_d]
+    KF_d    = model[:KF_d]
+    Nfirm   = model[:Nfirm]
+    PROFIT  = model[:PROFIT]
+
+    NPT     = model[:NPT]
+    PF      = model[:PF]
+    NW      = model[:NW]
+    NR      = model[:NR]
+
+    TY      = model[:TY]
+    FY      = model[:FY]
+    LY      = model[:LY]
+    KY      = model[:KY]
+    YH      = model[:YH]
+    DeprY   = model[:DeprY]
+    YD      = model[:YD]
+    YC      = model[:YC]
+    SAV     = model[:SAV]
+    PNUM    = model[:PNUM]
+
+    # Paper uses the old capital vintage in the fixed capital cost term of Y-4.
+    oldv = ("Old" in v) ? "Old" : first(v)
+
+    # (Y-1) Land remuneration: TY = sum_i NPT_i * T^d_i
+    @constraint(model, Y_1, (TY) - (sum(NPT[ii] * Td[ii] for ii in i)) ⟂ TY)
+
+    # (Y-2) Sector-specific factor remuneration: FY = sum_i PF_i * F^d_i
+    @constraint(model, Y_2, (FY) - (sum(PF[ii] * Fd[ii] for ii in i)) ⟂ FY)
+
+    # (Y-3) Labor remuneration by skill:
+    # LY_l = sum_i NW_{l,i} * (LV^d_{l,i} + N_i * LF^d_{l,i})
+    # Includes labor payments to the fixed-cost component under increasing returns.
+    @constraint(model, Y_3[ll in l], (LY[ll]) - (sum(NW[ll,ii] * (LV[ll,ii] + Nfirm[ii] * LF_d[ll,ii]) for ii in i)) ⟂ LY[ll])
+
+    # (Y-4) Capital remuneration:
+    # KY = sum_i [ sum_v NR_{i,v} * Kv^d_{i,v} + NR_{i,Old} * N_i * KF^d_i + Π_i ]
+    # Includes fixed capital cost payments and profits/markups.
+    @constraint(model, Y_4, (KY) - (sum(
+            sum(NR[ii,vv] * Kvd[ii,vv] for vv in v)
+            + NR[ii,oldv] * Nfirm[ii] * KF_d[ii]
+            + PROFIT[ii]
+            for ii in i
+        )) ⟂ KY)
+
+    # (Y-5) Household income allocation across factor incomes, fiscal depreciation,
+    # government transfers, and net foreign transfers.
+    # Note: phi_* and TRG/WTR are calibrated/precomputed tables in PAR.
+    @constraint(model, Y_5[hh in h], (YH[hh]) - (PAR[:phi_T][hh] * TY
+          + PAR[:phi_F][hh] * FY
+          + sum(PAR[:phi_L][(hh,ll)] * LY[ll] for ll in l)
+          + PAR[:phi_K][hh] * (KY - sum(DeprY[hhh] for hhh in h))
+          + PAR[:TRG][hh]
+          + PNUM * sum(PAR[:WTR][(rr,rrp,inn,"HH",hh)] for rr in r for rrp in rp for inn in ins)) ⟂ YH[hh])
+
+    # (Y-6) Fiscal depreciation allocated using capital-income shares.
+    @constraint(model, Y_6[hh in h], (DeprY[hh]) - (PAR[:phi_K][hh] *
+            sum(PAR[:delta_f][(ii,vv)] * NR[ii,vv] * Kvd[ii,vv] for ii in i for vv in v)) ⟂ DeprY[hh])
+
+    # (Y-7) Disposable income after direct tax.
+    @constraint(model, Y_7[hh in h], (YD[hh]) - ((1 - PAR[:chi_kappa] * PAR[:kappa_h][hh]) * YH[hh]) ⟂ YD[hh])
+
+    # (Y-8) Income allocated by the LES/ELES mechanism.
+    @constraint(model, Y_8[hh in h], (YC[hh]) - (YD[hh] - SAV[hh]) ⟂ YC[hh])
+
+    return model
+end
