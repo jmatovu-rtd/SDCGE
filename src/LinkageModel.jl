@@ -1,3 +1,9 @@
+# Rewritten by John-Mary Matovu
+#             Research Fellow
+#             Research for Transformation and Development
+#             Kampala, Uganda
+#             www.rtdug.org
+
 module LinkageModel
 
 using JuMP

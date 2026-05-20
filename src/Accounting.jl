@@ -1,5 +1,14 @@
 # Usage: add_accounting_equations!(model, data, PAR)
-# Paper-numbered LINKAGE equations coded as JuMP constraints.
+# Annex H accounting bridge equations.
+#
+# These constraints link the main LINKAGE equilibrium variables to the GTAP-style
+# value-flow variables (VDFM, VDFA, VIFM, VIFA, EVFA) and to aggregate accounting
+# identities (TAXREV, GOVREV, SAVE, INVEST, GDP, CA).
+#
+# IMPORTANT — several constraints below are stubs/placeholders that pin variables to
+# zero or to a single-agent approximation.  They are marked "(stub)" and should be
+# replaced with full multi-agent accounting when real data and institutional detail
+# become available.  The stubs keep PATH from treating those variables as free.
 
 function add_accounting_equations!(model, data::LinkageData, PAR)
     S=data.sets; default_sets!(data)
