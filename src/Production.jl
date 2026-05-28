@@ -48,7 +48,9 @@ function add_production_equations!(model, data::LinkageData, PAR)
     @constraint(model, P_26[ii in cr], (Pfert[ii]) - ((sum(PAR[:alpha_ft][(jj,ii)]*((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]/PAR[:lambda_ft][(jj,ii)])^(1-PAR[:sigma_ft][(jj,ii)]) for jj in ft))^(1/(1-PAR[:sigma_ft][(first(ft),ii)]))) ⟂ Pfert[ii])
     @constraint(model, P_27[jj in e, ii in cr], (XAp[jj,ii]) - (sum(PAR[:lambda_ep][(jj,ii)]^(PAR[:sigma_ep][(jj,ii)]-1)*PAR[:alpha_ep][(jj,ii)]*(PEp[ii,vv]/((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]))^(PAR[:sigma_ep][(jj,ii)])*XEp[ii,vv] for vv in v)) ⟂ XAp[jj,ii])
     @constraint(model, P_28[ii in cr, vv in v], (PEp[ii,vv]) - ((sum(PAR[:alpha_ep][(jj,ii)]*((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]/PAR[:lambda_ep][(jj,ii)])^(1-PAR[:sigma_ep][(jj,ii)]) for jj in e))^(1/(1-PAR[:sigma_ep][(first(e),ii)]))) ⟂ PEp[ii,vv])
-    @constraint(model, P_29[jj in nnft, ii in cr], (XAp[jj,ii]) - (PAR[:a_nd][(jj,ii)]*((PND[ii]/((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]))^0.0)*ND[ii]) ⟂ XAp[jj,ii])
+    # P_29 restricted to nnft minus energy: energy inputs are handled by P_27 (CES).
+    # Including energy here would give XAp[e,cr] two equations.
+    @constraint(model, P_29[jj in [x for x in nnft if !(x in e)], ii in cr], (XAp[jj,ii]) - (PAR[:a_nd][(jj,ii)]*((PND[ii]/((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]))^0.0)*ND[ii]) ⟂ XAp[jj,ii])
     @constraint(model, P_30[ii in cr], (PND[ii]) - (sum(PAR[:a_nd][(jj,ii)]*(1+PAR[:tau_Ap][(jj,ii)])*PA[jj] for jj in nnft)) ⟂ PND[ii])
 
     # Livestock production P-31 to P-54
@@ -74,7 +76,8 @@ function add_production_equations!(model, data::LinkageData, PAR)
     @constraint(model, P_50[ii in lv], (Pfeed[ii]) - ((sum(PAR[:alpha_fd][(jj,ii)]*((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]/PAR[:lambda_fd][(jj,ii)])^(1-PAR[:sigma_fd][(jj,ii)]) for jj in fd))^(1/(1-PAR[:sigma_fd][(first(fd),ii)]))) ⟂ Pfeed[ii])
     @constraint(model, P_51[jj in e, ii in lv], (XAp[jj,ii]) - (sum(PAR[:lambda_ep][(jj,ii)]^(PAR[:sigma_ep][(jj,ii)]-1)*PAR[:alpha_ep][(jj,ii)]*(PEp[ii,vv]/((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]))^(PAR[:sigma_ep][(jj,ii)])*XEp[ii,vv] for vv in v)) ⟂ XAp[jj,ii])
     @constraint(model, P_52[ii in lv, vv in v], (PEp[ii,vv]) - ((sum(PAR[:alpha_ep][(jj,ii)]*((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]/PAR[:lambda_ep][(jj,ii)])^(1-PAR[:sigma_ep][(jj,ii)]) for jj in e))^(1/(1-PAR[:sigma_ep][(first(e),ii)]))) ⟂ PEp[ii,vv])
-    @constraint(model, P_53[jj in nnfd, ii in lv], (XAp[jj,ii]) - (PAR[:a_nd][(jj,ii)]*ND[ii]) ⟂ XAp[jj,ii])
+    # P_53 restricted to nnfd minus energy: energy inputs handled by P_51 (CES).
+    @constraint(model, P_53[jj in [x for x in nnfd if !(x in e)], ii in lv], (XAp[jj,ii]) - (PAR[:a_nd][(jj,ii)]*ND[ii]) ⟂ XAp[jj,ii])
     @constraint(model, P_54[ii in lv], (PND[ii]) - (sum(PAR[:a_nd][(jj,ii)]*(1+PAR[:tau_Ap][(jj,ii)])*PA[jj] for jj in nnfd)) ⟂ PND[ii])
 
     # Non-agricultural production P-55 to P-80
@@ -92,7 +95,8 @@ function add_production_equations!(model, data::LinkageData, PAR)
     @constraint(model, P_66[ii in ip, vv in v], (PKT[ii,vv]) - ((PAR[:alpha_k][(ii,vv)]*(R[ii,vv]/PAR[:lambda_k][(ii,vv)])^(1-PAR[:sigma_k][(ii,vv)]) + PAR[:alpha_ff][(ii,vv)]*(PF[ii]/PAR[:lambda_f][(ii,vv)])^(1-PAR[:sigma_k][(ii,vv)]))^(1/(1-PAR[:sigma_k][(ii,vv)]))) ⟂ PKT[ii,vv])
     @constraint(model, P_67[jj in e, ii in ip], (XAp[jj,ii]) - (sum(PAR[:lambda_ep][(jj,ii)]^(PAR[:sigma_ep][(jj,ii)]-1)*PAR[:alpha_ep][(jj,ii)]*(PEp[ii,vv]/((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]))^(PAR[:sigma_ep][(jj,ii)])*XEp[ii,vv] for vv in v)) ⟂ XAp[jj,ii])
     @constraint(model, P_68[ii in ip, vv in v], (PEp[ii,vv]) - ((sum(PAR[:alpha_ep][(jj,ii)]*((1+PAR[:tau_Ap][(jj,ii)])*PA[jj]/PAR[:lambda_ep][(jj,ii)])^(1-PAR[:sigma_ep][(jj,ii)]) for jj in e))^(1/(1-PAR[:sigma_ep][(first(e),ii)]))) ⟂ PEp[ii,vv])
-    @constraint(model, P_69[jj in i, ii in ip], (XAp[jj,ii]) - (PAR[:a_nd][(jj,ii)]*ND[ii]) ⟂ XAp[jj,ii])
+    # P_69 restricted to non-energy goods: energy inputs handled by P_67 (CES).
+    @constraint(model, P_69[jj in [x for x in i if !(x in e)], ii in ip], (XAp[jj,ii]) - (PAR[:a_nd][(jj,ii)]*ND[ii]) ⟂ XAp[jj,ii])
     @constraint(model, P_70[ii in ip], (PND[ii]) - (sum(PAR[:a_nd][(jj,ii)]*(1+PAR[:tau_Ap][(jj,ii)])*PA[jj] for jj in i)) ⟂ PND[ii])
     # Labor-demand disaggregation P-72 to P-75.
     # These equations decompose the aggregate unskilled/skilled labor bundles into skill-specific labor demand LV.
@@ -113,8 +117,37 @@ function add_production_equations!(model, data::LinkageData, PAR)
                        ((W[ll,ii] + 1.0e-9) / PAR[:lambda_l][(ll,ii)])^(1 - PAR[:sigma_sl][ii])
                        for ll in sl))^(1 / (1 - PAR[:sigma_sl][ii]))) ⟂ SW[ii])
 
-    # Supplemental closure guards retained outside the paper numbering.
-    @constraint(model, P_aux_XP_sum[ii in i], (XP[ii]) - (sum(XPv[ii,vv] for vv in v)) ⟂ XP[ii])
+    # Tax-inclusive intermediate price for diagonal elements (off-diagonal are fixed at PA[j] via PAp_wedge_offdiag in Other.jl).
     @constraint(model, P_aux_PAp_wedge[ii in i], (PAp[ii,ii]) - ((1 + PAR[:tau_Ap][(ii,ii)])*PA[ii]) ⟂ PAp[ii,ii])
+
+    # Stub equations for increasing-returns firm variables.
+    # In the static competitive benchmark these equal their calibrated values.
+    # Nfirm = 1 (one representative firm per sector).
+    @constraint(model, P_Nfirm[ii in i], (Nfirm[ii]) - (1.0) ⟂ Nfirm[ii])
+    # Fixed-cost labor and capital per firm are zero in the competitive specification.
+    @constraint(model, P_LFd[ll in l, ii in i], (LF_d[ll,ii]) - (0.0) ⟂ LF_d[ll,ii])
+    @constraint(model, P_KFd[ii in i], (KF_d[ii]) - (0.0) ⟂ KF_d[ii])
+
+    # ── Sector-specific variable stubs ───────────────────────────────────────
+    # Variables declared for all i but only used in sector subsets.
+    # Sectors outside the relevant subset get stub equations fixing them to 0 (quantities)
+    # or 1 (prices) so the system remains square.
+
+    # Crop nest variables (P_10..P_30): only active for cr; zero out for lv+ip.
+    noncr = [x for x in i if !(x in cr)]
+    @constraint(model, P_HKTEF_stub[ii in noncr, vv in v],  (HKTEF[ii,vv])  - (0.0) ⟂ HKTEF[ii,vv])
+    @constraint(model, P_PHKTEF_stub[ii in noncr, vv in v], (PHKTEF[ii,vv]) - (1.0) ⟂ PHKTEF[ii,vv])
+    @constraint(model, P_fert_stub[ii in noncr],             (fert[ii])      - (0.0) ⟂ fert[ii])
+    @constraint(model, P_Pfert_stub[ii in noncr],            (Pfert[ii])     - (1.0) ⟂ Pfert[ii])
+
+    # Livestock nest variables (P_31..P_54): only active for lv; zero out for cr+ip.
+    nonlv = [x for x in i if !(x in lv)]
+    @constraint(model, P_KTEL_stub[ii in nonlv, vv in v],  (KTEL[ii,vv])  - (0.0) ⟂ KTEL[ii,vv])
+    @constraint(model, P_PKTEL_stub[ii in nonlv, vv in v], (PKTEL[ii,vv]) - (1.0) ⟂ PKTEL[ii,vv])
+    @constraint(model, P_TFD_stub[ii in nonlv, vv in v],   (TFD[ii,vv])   - (0.0) ⟂ TFD[ii,vv])
+    @constraint(model, P_PTFD_stub[ii in nonlv, vv in v],  (PTFD[ii,vv])  - (1.0) ⟂ PTFD[ii,vv])
+    @constraint(model, P_feed_stub[ii in nonlv],            (feed[ii])     - (0.0) ⟂ feed[ii])
+    @constraint(model, P_Pfeed_stub[ii in nonlv],           (Pfeed[ii])    - (1.0) ⟂ Pfeed[ii])
+
     return model
 end

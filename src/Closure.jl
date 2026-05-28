@@ -12,6 +12,7 @@ function add_closure_equations!(model, data::LinkageData, PAR)
     WPE=model[:WPE]; WPM=model[:WPM]; WTFd=model[:WTFd]; WTFout=model[:WTFout]; WTFs=model[:WTFs]; TauPR=model[:TauPR]
     NW=model[:NW]; LV=model[:LV]; Nfirm=model[:Nfirm]; LF_d=model[:LF_d]; NPT=model[:NPT]; Td=model[:Td]
     NR=model[:NR]; Kvd=model[:Kvd]; KF_d=model[:KF_d]; YH=model[:YH]; FDInvVar=model[:FDInv]
+    RGDP=model[:RGDP]
 
     oldv = ("Old" in v) ? "Old" : first(v)
     gov = ("Gov" in f) ? "Gov" : first(f)
@@ -50,8 +51,8 @@ function add_closure_equations!(model, data::LinkageData, PAR)
     # (C-7) Foreign saving value at world numeraire price.
     @constraint(model, C_7[rr in r], (Sf[rr]) - (PNUM * PAR[:Sfbar][rr]) ⟂ Sf[rr])
 
-    # (C-8) World foreign saving sums to zero.
-    @constraint(model, C_8, (sum(Sf[rr] for rr in r)) - (0) ⟂ Sf[first(r)])
+    # C-8 REMOVED: all Sf[rr] are already pinned by C_7 (exogenous foreign saving per region).
+    # C_8 used Sf[first(r)] as its ⟂ variable, duplicating C_7 for that region.
 
     # (C-9) Savings-investment balance; one region normally dropped by Walras law.
     @constraint(model, C_9, (PFD[inv]*FD[inv]) - (sum(SAV[hh] + DeprY[hh] for hh in h) + Sg + Sf[rr0]
@@ -61,12 +62,16 @@ function add_closure_equations!(model, data::LinkageData, PAR)
     # (C-10) Investment share of GDP at market prices.
     @constraint(model, C_10, (InvSh) - (PFD[inv] * FD[inv] / GDPMPr) ⟂ InvSh)
 
-    # (C-11) World numeraire price index of OECD manufacturing exports.
-    @constraint(model, C_11, (PNUM) - (sum(WPE[rr,rrp,ii] * PAR[:WTF0][(rr,rrp,ii)] for rr in r for rrp in rp for ii in i) /
-                sum(PAR[:WPE0][(rr,rrp,ii)] * PAR[:WTF0][(rr,rrp,ii)] for rr in r for rrp in rp for ii in i)) ⟂ PNUM)
+    # C-11 REMOVED: PNUM is already pinned to 1 by M_5 in Other.jl (numeraire).
+    # Including C_11 here would give PNUM two equations simultaneously.
 
     # (C-12) World average rate of return to capital.
     @constraint(model, C_12, (WRR) - (sum(PAR[:TR_region][rr] * PAR[:K_region][rr] for rr in r) / sum(PAR[:K_region][rr] for rr in r)) ⟂ WRR)
+
+    # GDPMPr: real GDP at market prices used in C_6 for government expenditure.
+    # Defined as real GDP of the first region (RGDP is the regional real GDP
+    # index computed in M_2 of Other.jl).
+    @constraint(model, C_GDPMPr, (GDPMPr) - (RGDP[rr0]) ⟂ GDPMPr)
 
     return model
 end

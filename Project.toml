@@ -1,6 +1,7 @@
 [deps]
-JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
-Complementarity = "a5a1f8c2-4ac1-5e97-a03e-8b05c9c71974"
-PATHSolver = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-XLSX = "fdbf4ff8-5c6f-5e4f-8b2b-7f49c9b7f7a2"
+Complementarity = "a9b2a840-c9d5-5181-a245-8df664c2d6e7"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+PATHSolver = "f5f7c340-0bb3-5c69-969a-41884d311d1b"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"

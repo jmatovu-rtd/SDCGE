@@ -35,7 +35,7 @@ end
 
 function _lcge_value(v::JuMP.VariableRef)
     try
-        return result_value(v)
+        return JuMP.value(v)
     catch
         return missing
     end
@@ -68,10 +68,11 @@ function _lcge_collect_variable_rows!(rows::Vector{Vector{Any}}, name::Symbol, o
         return rows
     end
 
-    # JuMP containers support pairs(container). This covers DenseAxisArray,
-    # SparseAxisArray, and normal Arrays of VariableRef.
+    # Iterate over JuMP containers (DenseAxisArray, SparseAxisArray, Array).
+    # `pairs()` does not work on DenseAxisArray, so use eachindex + indexing.
     try
-        for (idx, var) in pairs(obj)
+        for idx in eachindex(obj)
+            var = obj[idx]
             if var isa JuMP.VariableRef
                 val = _lcge_value(var)
                 start = _lcge_start_value(var)
@@ -81,7 +82,7 @@ function _lcge_collect_variable_rows!(rows::Vector{Vector{Any}}, name::Symbol, o
             end
         end
     catch
-        # Ignore non-variable JuMP objects.
+        # Non-variable JuMP container (e.g., constraints) — skip silently.
     end
     return rows
 end
@@ -196,10 +197,39 @@ function export_results!(m, data::LinkageData; outdir::AbstractString="results")
         _lcge_metadata_rows(m),
     )
 
+    # Per-variable CSVs. Includes both legacy LINKAGE names (XD, XM, E, INVEST, ...)
+    # and the actual JuMP variables in the current model (XDs, XDd, XMT, ES, FDInv, ...).
+    # The `if !isempty(rows)` guard skips legacy names that aren't in the model.
     common_variables = [
-        "XP", "XA", "XD", "XQ", "ND", "VA", "XM", "E", "D",
-        "GDP", "RGDP", "CPI", "PGDP", "YH", "YD", "YC", "SAV",
-        "INVEST", "SAVE", "GOVREV", "GEXP", "TAXREV"
+        # Output & supply / demand
+        "XP", "XA", "XDs", "XDd", "XDc", "XDf",
+        "XMT", "XM1", "XM2", "XMc", "XMf", "XMgr",
+        "ES", "WTFd", "WTFs", "WTFin", "WTFout",
+        # Production / intermediate
+        "ND", "VA", "XPv", "Kvd", "LV", "Td", "Fd",
+        "XAp", "XAc", "XAf", "fert", "feed", "XEp",
+        # Prices
+        "PP", "PX", "PA", "PD", "PMT", "PE", "PM",
+        "PC", "PAc", "PFD", "PVA", "PND", "PT", "PF", "NPT", "PTLnd",
+        "W", "NW", "AVGW", "TW", "WMIN",
+        "R", "NR", "TR", "CHIv",
+        # Macro aggregates
+        "GDP", "RGDP", "CPI", "PGDP", "GDPMPr",
+        # Income / expenditure / savings
+        "YH", "YD", "YC", "YSTAR", "SAV", "DeprY", "CPIH",
+        "TY", "FY", "KY", "LY",
+        # Government, investment, foreign
+        "YG", "Sg", "RSg", "TarY", "RTarY",
+        "FD", "FDInv", "GOVDEM", "INVDEM", "InvSh",
+        "Sf",
+        # Labor markets
+        "LS", "UE", "MIGR", "PS",
+        # Capital
+        "KS", "KSs", "KActual", "KNorm", "K0", "RR",
+        "WRR", "WPMg", "WXMg",
+        # Legacy LINKAGE names (kept for backward compatibility; empty if absent)
+        "XD", "XQ", "XM", "E", "D",
+        "INVEST", "SAVE", "GOVREV", "GEXP", "TAXREV",
     ]
 
     for vname in common_variables
@@ -213,7 +243,148 @@ function export_results!(m, data::LinkageData; outdir::AbstractString="results")
         end
     end
 
+    # Key economic indicators summary (one row per indicator).
+    _lcge_write_csv(
+        joinpath(outdir, "results_summary.csv"),
+        ["indicator", "description", "value", "start_value"],
+        _lcge_macro_summary_rows(m, data),
+    )
+
     return df
+end
+
+"""Build a named summary of key macro / closure / factor-income indicators.
+
+Each row maps a familiar economic concept to one or more JuMP variables (summing
+where needed). Useful for quickly inspecting whether the model reproduces the
+SAM benchmark and for comparing pre/post-shock outcomes.
+"""
+function _lcge_macro_summary_rows(m, data::LinkageData)
+    rows = Vector{Vector{Any}}()
+    S = data.sets
+    i = S[:i]; r = S[:r]; h = S[:h]; ag = S[:ag]
+    PAR = try parameters(data) catch; Dict{Symbol,Any}() end
+
+    function _v(sym, idx=())
+        haskey(m, sym) || return missing
+        try
+            return isempty(idx) ? _lcge_value(m[sym]) : _lcge_value(m[sym][idx...])
+        catch
+            return missing
+        end
+    end
+    function _vs(sym, idx=())
+        haskey(m, sym) || return missing
+        try
+            return isempty(idx) ? _lcge_start_value(m[sym]) : _lcge_start_value(m[sym][idx...])
+        catch
+            return missing
+        end
+    end
+    function _sum(sym, idxset)
+        haskey(m, sym) || return missing
+        total = 0.0; start = 0.0
+        try
+            for k in idxset
+                v  = _lcge_value(m[sym][k...])
+                sv = _lcge_start_value(m[sym][k...])
+                v  isa Real && (total += float(v))
+                sv isa Real && (start += float(sv))
+            end
+            return (total, start)
+        catch
+            return missing
+        end
+    end
+    function _push(name, desc, value, start)
+        push!(rows, Any[name, desc, value, start])
+    end
+
+    # ── Output and trade ──────────────────────────────────────────────────────
+    let pair = _sum(:XP, [(ii,) for ii in i])
+        pair isa Tuple && _push("XP_total",   "Total gross output Σ XP[i]",                       pair[1], pair[2])
+    end
+    let pair = _sum(:XA, [(ii,) for ii in i])
+        pair isa Tuple && _push("XA_total",   "Total Armington demand Σ XA[i]",                   pair[1], pair[2])
+    end
+    let pair = _sum(:XDs, [(ii,) for ii in i])
+        pair isa Tuple && _push("XD_total",   "Total domestic supply Σ XDs[i]  (legacy XD)",      pair[1], pair[2])
+    end
+    let pair = _sum(:XMT, [(ii,) for ii in i])
+        pair isa Tuple && _push("XM_total",   "Total imports Σ XMT[i]  (legacy XM)",              pair[1], pair[2])
+    end
+    let pair = _sum(:ES, [(ii,) for ii in i])
+        pair isa Tuple && _push("E_total",    "Total exports Σ ES[i]  (legacy E)",                pair[1], pair[2])
+    end
+    let pair = _sum(:ND, [(ii,) for ii in i])
+        pair isa Tuple && _push("ND_total",   "Total intermediate demand Σ ND[i]",                pair[1], pair[2])
+    end
+    let pair = _sum(:VA, [(ii,vv) for ii in i, vv in S[:v]])
+        pair isa Tuple && _push("VA_total",   "Total value added Σ VA[i,v]",                      pair[1], pair[2])
+    end
+
+    # ── Macro aggregates per region ───────────────────────────────────────────
+    for rr in r
+        _push("GDP_$(rr)",  "Nominal GDP at producer prices, region $(rr)",                 _v(:GDP,(rr,)),  _vs(:GDP,(rr,)))
+        _push("RGDP_$(rr)", "Real GDP (Σ XP), region $(rr)",                                _v(:RGDP,(rr,)), _vs(:RGDP,(rr,)))
+        _push("PGDP_$(rr)", "GDP deflator GDP/RGDP, region $(rr)",                          _v(:PGDP,(rr,)), _vs(:PGDP,(rr,)))
+        _push("CPI_$(rr)",  "Consumer price index (avg PC), region $(rr)",                  _v(:CPI,(rr,)),  _vs(:CPI,(rr,)))
+    end
+
+    # ── Household income / savings ────────────────────────────────────────────
+    for hh in h
+        _push("YH_$(hh)",   "Household income (Y_5), $(hh)",                                _v(:YH,(hh,)),   _vs(:YH,(hh,)))
+        _push("YD_$(hh)",   "Disposable income after tax (Y_7), $(hh)",                     _v(:YD,(hh,)),   _vs(:YD,(hh,)))
+        _push("YC_$(hh)",   "Income for consumption (Y_8), $(hh)",                          _v(:YC,(hh,)),   _vs(:YC,(hh,)))
+        _push("SAV_$(hh)",  "Household savings (D_3), $(hh)",                               _v(:SAV,(hh,)),  _vs(:SAV,(hh,)))
+        _push("DeprY_$(hh)","Depreciation (Y_6), $(hh)",                                    _v(:DeprY,(hh,)),_vs(:DeprY,(hh,)))
+    end
+
+    # ── Government, investment, savings totals ────────────────────────────────
+    _push("GOVREV",   "Government revenue YG  (legacy GOVREV)",                             _v(:YG),         _vs(:YG))
+    _push("GEXP",     "Government expenditure PFD[Gov]*FD[Gov]  (legacy GEXP)",
+          (haskey(m,:PFD) && haskey(m,:FD)) ? (_v(:PFD,("Gov",))*_v(:FD,("Gov",))) : missing,
+          (haskey(m,:PFD) && haskey(m,:FD)) ? (_vs(:PFD,("Gov",))*_vs(:FD,("Gov",))) : missing)
+    _push("Sg",       "Government saving (C_4)",                                            _v(:Sg),         _vs(:Sg))
+    _push("INVEST",   "Total investment PFD[Inv]*FD[Inv]  (legacy INVEST)",
+          (haskey(m,:PFD) && haskey(m,:FD)) ? (_v(:PFD,("Inv",))*_v(:FD,("Inv",))) : missing,
+          (haskey(m,:PFD) && haskey(m,:FD)) ? (_vs(:PFD,("Inv",))*_vs(:FD,("Inv",))) : missing)
+    _push("FDInv",    "Investment quantity FDInv (F_31)",                                   _v(:FDInv),      _vs(:FDInv))
+    _push("InvSh",    "Investment / GDP ratio (C_10)",                                      _v(:InvSh),      _vs(:InvSh))
+
+    # ── Tax revenue components (TAXREV ≈ YG = sum of all tax flows) ──────────
+    _push("TAXREV",   "Total tax revenue ≈ YG (legacy TAXREV)",                             _v(:YG),         _vs(:YG))
+    _push("TarY",     "Tariff revenue (C_1)",                                               _v(:TarY),       _vs(:TarY))
+
+    # ── Aggregate savings (SAVE = household + government + foreign) ───────────
+    let pair = _sum(:Sf, [(rr,) for rr in r])
+        sav_h = sum((v for v in (_v(:SAV,(hh,)) for hh in h) if v isa Real); init=0.0)
+        sav_h_start = sum((v for v in (_vs(:SAV,(hh,)) for hh in h) if v isa Real); init=0.0)
+        sg = _v(:Sg);  sg_s = _vs(:Sg)
+        if pair isa Tuple
+            sf, sf_s = pair
+            tot = sav_h + (sg isa Real ? sg : 0.0) + sf
+            ts  = sav_h_start + (sg_s isa Real ? sg_s : 0.0) + sf_s
+            _push("SAVE", "Aggregate savings = HH + Gov + Foreign  (legacy SAVE)", tot, ts)
+        end
+    end
+
+    # ── Factor incomes ────────────────────────────────────────────────────────
+    _push("TY", "Land income (Y_1)",                                                        _v(:TY),         _vs(:TY))
+    _push("FY", "Natural-resource income (Y_2)",                                            _v(:FY),         _vs(:FY))
+    _push("KY", "Capital income (Y_4)",                                                     _v(:KY),         _vs(:KY))
+    for ll in S[:l]
+        _push("LY_$(ll)", "Labor income by skill, $(ll)",                                   _v(:LY,(ll,)),   _vs(:LY,(ll,)))
+    end
+
+    # ── Land / NR markets ─────────────────────────────────────────────────────
+    _push("TLnd",  "Aggregate land supply",                                                 _v(:TLnd),       _vs(:TLnd))
+    _push("PTLnd", "Aggregate land price",                                                  _v(:PTLnd),      _vs(:PTLnd))
+    _push("KS",    "Aggregate capital supply",                                              _v(:KS),         _vs(:KS))
+    _push("TR",    "Aggregate capital return",                                              _v(:TR),         _vs(:TR))
+    _push("PNUM",  "Numeraire",                                                             _v(:PNUM),       _vs(:PNUM))
+
+    return rows
 end
 
 """Solve the model and immediately export result files."""

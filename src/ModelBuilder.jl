@@ -116,9 +116,9 @@ function build_linkage_model!(m, data::LinkageData)
     add_closure_equations!(m, data, PAR)
     add_factor_equations!(m, data, PAR)
     add_other_equations!(m, data, PAR)
-    add_dynamic_equations!(m, data, PAR)
-    add_accounting_equations!(m, data, PAR)
-
+    # Dynamics: not part of the static MCP. Recursive dynamics is implemented
+    # externally by RecursiveDynamic.jl (single trajectory) and
+    # PolicyScenarios.jl (multi-scenario experiments).
     return m
 end
 

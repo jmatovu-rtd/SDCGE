@@ -16,7 +16,11 @@ function add_demand_equations!(model, data::LinkageData, PAR)
     @constraint(model, D_1[hh in h], (YSTAR[hh]) - (YC[hh] - sum(PC[kk] * PAR[:PopH][hh] * PAR[:theta][(kk,hh)] for kk in k)) ⟂ YSTAR[hh])
 
     # (D-2) ELES household demand: XC_k,h = Pop_h θ_k,h + μ_k,h Y*_h / PC_k,h.
-    @constraint(model, D_2[kk in k, hh in h], (XH[kk,hh]) - (PAR[:PopH][hh] * PAR[:theta][(kk,hh)] + PAR[:mu_c][(kk,hh)] * YSTAR[hh] / PC[kk]) ⟂ XH[kk,hh])
+    # Multiplied through by PC_k,h to avoid the division-by-near-zero singularity
+    # that causes huge residuals when PATH probes prices near the lower bound.
+    @constraint(model, D_2[kk in k, hh in h],
+        (XH[kk,hh] * PC[kk]) - (PAR[:PopH][hh] * PAR[:theta][(kk,hh)] * PC[kk]
+                                + PAR[:mu_c][(kk,hh)] * YSTAR[hh]) ⟂ XH[kk,hh])
 
     # (D-3) Household saving residual: S_h = Yhc_h - Σ PC_k,h XC_k,h.
     @constraint(model, D_3[hh in h], (SAV[hh]) - (YC[hh] - sum(PC[kk] * XH[kk,hh] for kk in k)) ⟂ SAV[hh])
@@ -52,9 +56,10 @@ function add_demand_equations!(model, data::LinkageData, PAR)
     # (D-13) Agent-specific Armington import other-final-demand component.
     @constraint(model, D_13[ii in i, ff in f], (XMf[ii,ff]) - (PAR[:alpha_mf][(ii,ff)] * (((1 + PAR[:tau_Af][(ii,ff)]) * PA[ii]) / ((1 + PAR[:tau_Mf][(ii,ff)]) * PMT[ii]))^PAR[:sigma_mf][(ii,ff)] * XAf[ii,ff]) ⟂ XMf[ii,ff])
 
-    # (D-14) Agent-specific Armington other-final-demand dual price.
-    @constraint(model, D_14[ii in i, ff in f], ((1 + PAR[:tau_Af][(ii,ff)]) * PA[ii]) - ((PAR[:alpha_df][(ii,ff)]*((1 + PAR[:tau_Df][(ii,ff)])*PD[ii])^(1-PAR[:sigma_mf][(ii,ff)]) +
-         PAR[:alpha_mf][(ii,ff)]*((1 + PAR[:tau_Mf][(ii,ff)])*PMT[ii])^(1-PAR[:sigma_mf][(ii,ff)]))^(1/(1-PAR[:sigma_mf][(ii,ff)]))) ⟂ PA[ii])
+    # D-14 REMOVED: the price condition for other-final-demand Armington goods
+    # is already imposed by T_4 in Trade.jl (PA[i] = CES dual price).
+    # Including D_14 here would add |i|×|f| extra equations all pointing to
+    # PA[ii], making the system over-determined.
 
     return model
 end

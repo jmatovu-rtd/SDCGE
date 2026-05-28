@@ -13,6 +13,7 @@ using XLSX
 using Complementarity
 using PATHSolver
 using DataFrames
+PATHSolver.c_api_License_SetString("1259252040&Courtesy&&&USR&GEN2035&5_1_2026&1000&PATH&GEN&31_12_2035&0_0_0&6000&0_0")
 
 include("Types.jl")
 include("SAM.jl")
@@ -29,12 +30,16 @@ include("Equilibrium.jl")
 include("Closure.jl")
 include("Factors.jl")
 include("Other.jl")
-include("Dynamics.jl")
-include("Accounting.jl")
+# Dynamics.jl and Accounting.jl removed: their equations referenced legacy
+# variables (RGDPMP, LambdaL/K, AIDADS, EVFA, ...) that were dropped during
+# the static-model cleanup. Recursive dynamics is implemented in
+# RecursiveDynamic.jl / PolicyScenarios.jl instead.
 include("Results.jl")
 include("Plotting.jl")
 include("Diagnostics.jl")
 include("ModelBuilder.jl")
+include("RecursiveDynamic.jl")
+include("PolicyScenarios.jl")
 
 export LinkageData, init_data, default_sets!, setup_sam_accounts!, build_default_large_sam!,
        read_sam_csv!, read_sam_excel!, validate_sam!, balance_sam_ras!, sam_balance_table, sam_balance_summary, assert_balanced_sam!, export_sam_balance_report!, export_balanced_sam!, calibrate_from_sam!,
@@ -45,6 +50,9 @@ export LinkageData, init_data, default_sets!, setup_sam_accounts!, build_default
        build_model, model, solve_model!, solve_linkage!, run_linkage!, run_model!, print_model_diagnostics, print_solver_status,
        diagnose_model, print_equation_diagnostics, diagnostic_variables, diagnostic_constraints,
        diagnostic_equation_matches, diagnostic_variables_without_equations,
-       diagnostic_variables_with_multiple_equations, diagnostic_redundant_equations
+       diagnostic_variables_with_multiple_equations, diagnostic_redundant_equations,
+       run_recursive_dynamic!, update_period_data!, plot_dynamic_results,
+       Scenario, write_policy_template, read_policy_scenarios, run_policy_experiments!,
+       plot_all_scenarios
 
 end
